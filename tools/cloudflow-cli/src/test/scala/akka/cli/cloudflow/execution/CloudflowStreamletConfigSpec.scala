@@ -120,6 +120,61 @@ class CloudflowStreamletConfigSpec
       .toBytes shouldBe 1024 * 1024 * 1024
   }
 
+  "The CloudflowConfig" should "return the correct pod configuration" in {
+    // Arrange
+    val appConfig = ConfigFactory.parseString("""
+      cloudflow {
+        # if u remove the streamlet specific config then it works again
+        streamlets.logger {
+          kubernetes.pods.pod.containers {
+            cloudflow {
+              resources {
+                requests {
+                  memory = "1G"
+                }
+              }
+            }
+          }
+        }
+        runtimes.akka {
+          kubernetes.pods.pod.containers {
+            cloudflow {
+              resources {
+                limits {
+                  memory = "3G"
+                }
+              }
+              env = [
+                { name = "JAVA_OPTS"
+                  value = "-XX:MaxRAMPercentage=40.0"
+                }
+              ]
+            }
+          }
+        }
+      }
+      """)
+
+    // Act
+    val cloudflowConfig = CloudflowConfig.loadAndValidate(appConfig).get
+
+    val podConfig = CloudflowConfig.podsConfig("logger", "akka", cloudflowConfig)
+
+    // Assert
+    podConfig
+      .getConfigList("kubernetes.pods.pod.containers.cloudflow.env")
+      .get(0)
+      .getString("name") shouldBe "JAVA_OPTS"
+    podConfig
+      .getConfigList("kubernetes.pods.pod.containers.cloudflow.env")
+      .get(0)
+      .getString("value") shouldBe "-XX:MaxRAMPercentage=40.0"
+    podConfig
+      .getString("kubernetes.pods.pod.containers.cloudflow.resources.requests.memory") shouldBe "1G"
+    podConfig
+      .getString("kubernetes.pods.pod.containers.cloudflow.resources.limits.memory") shouldBe "3G"
+  }
+
   it should "produce the same updated configuration for swiss-knife spark" in {
     // Arrange
     val config = ConfigFactory.parseString(
